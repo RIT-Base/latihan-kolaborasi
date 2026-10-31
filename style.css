@@ -521,6 +521,7 @@ h1 {
 @media (max-width: 640px) {
   body {
     padding: 48px 20px 80px;
+    background: #05080a;
   }
 
   .hero {
@@ -530,7 +531,12 @@ h1 {
   .search-wrap {
     margin-bottom: 32px;
   }
-
+  
+  
+  .search-box {
+    font-size: 12px;
+  }
+ 
   .cards-grid {
     grid-template-columns: 1fr;
     gap: 16px;

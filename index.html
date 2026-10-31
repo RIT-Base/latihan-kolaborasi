@@ -44,14 +44,34 @@
     </div>
   </div>
 
-  <!-- Three.js from CDN -->
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script>
-    /* ============================================================
-       THREE.JS ANIMATED SHADER BACKGROUND
-       ============================================================ */
     (function initShader() {
       const canvas = document.getElementById('shader-canvas');
+
+      const isMobile =
+        window.matchMedia('(max-width: 768px)').matches ||
+        /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+        (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+
+      if (isMobile) {
+        canvas.style.display = 'none';
+        return;
+      }
+
+      // WebGL availability check
+      try {
+        const testCanvas = document.createElement('canvas');
+        const gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+        if (!gl) {
+          canvas.style.display = 'none';
+          return;
+        }
+      } catch (e) {
+        canvas.style.display = 'none';
+        return;
+      }
+
       const renderer = new THREE.WebGLRenderer({
         canvas,
         antialias: true,
@@ -66,7 +86,6 @@
       const uniforms = {
         u_time:      { value: 0 },
         u_resolution:{ value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-        u_mouse:     { value: new THREE.Vector2(0.5, 0.5) }
       };
 
       const vertexShader = `
@@ -75,7 +94,6 @@
         }
       `;
 
-       // shader
       const fragmentShader = `
         precision highp float;
 
@@ -112,56 +130,38 @@
 
         void main() {
           vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-
           vec2 p = uv;
           p.x *= u_resolution.x / u_resolution.y;
 
-          float t = u_time * 0.04;
+          float t = u_time * 0.08;
 
-          // --- TWO-LEVEL DOMAIN WARP (this is the marble secret) ---
-          // Level 1: slow drift
           vec2 q = vec2(
             fbm(p * 2.0 + vec2(0.0, t)),
             fbm(p * 2.0 + vec2(t, 0.0))
           );
-
-          // Level 2: warp AGAIN — this creates the veiny, swirled marble pattern
           vec2 r = vec2(
             fbm(p * 2.0 + 2.5 * q + vec2(1.7, 9.2) + 0.3 * t),
             fbm(p * 2.0 + 2.5 * q + vec2(8.3, 2.8) + 0.3 * t)
           );
-
-          // Final noise field, warped by r
           float f = fbm(p * 2.0 + 3.5 * r);
 
-          // --- MARBLE VEINS ---
-          // Marble veins are where the noise crosses a threshold sharply.
-          // Use sin() on the warped value to create periodic vein bands.
           float veins = sin(f * 10.0 + r.x * 4.0);
           float line = smoothstep(0.88, 1.0, abs(veins));
-
-          // Sharpen veins into thin lines (this is where the wireframe feel comes from)
-          // float line = smoothstep(0.85, 1.0, abs(veins));
-          // Secondary finer veins
           float fineVeins = sin(f * 22.0 + r.y * 6.0);
           float fineLine = smoothstep(0.94, 1.0, abs(fineVeins)) * 0.4;
 
-          // Combine
           float wire = clamp(line + fineLine, 0.0, 1.0);
 
-          // --- PALETTE ---
           vec3 base = vec3(0.01, 0.02, 0.03);
-          vec3 wireColor = vec3(0.49, 0.83, 0.88);   // soft cyan
-          vec3 veinTint  = vec3(0.30, 0.45, 0.55);   // dim teal for body of marble
+          vec3 wireColor = vec3(0.49, 0.83, 0.88);
+          vec3 veinTint  = vec3(0.30, 0.45, 0.55);
 
-          // Faint body tint where the marble is "thick" (high f)
           float body = smoothstep(0.4, 0.9, f) * 0.08;
 
           vec3 col = base;
           col += veinTint * body;
           col += wireColor * wire;
 
-          // Vignette
           vec2 vp = uv - 0.5;
           vp.x *= u_resolution.x / u_resolution.y;
           float vig = 1.0 - smoothstep(0.5, 1.2, length(vp));
@@ -181,38 +181,20 @@
       const mesh = new THREE.Mesh(geometry, material);
       scene.add(mesh);
 
-      // Mouse tracking
-      const mouse = { x: 0.5, y: 0.5 };
-      window.addEventListener('mousemove', (e) => {
-        mouse.x = e.clientX / window.innerWidth;
-        mouse.y = 1.0 - e.clientY / window.innerHeight;
-      });
-
-      // Resize
       window.addEventListener('resize', () => {
         renderer.setSize(window.innerWidth, window.innerHeight);
         uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
       });
 
-      // Animate
       const clock = new THREE.Clock();
       function animate() {
-        const elapsed = clock.getElapsedTime();
-        uniforms.u_time.value = elapsed;
-
-        // Smooth mouse lerp
-        uniforms.u_mouse.value.x += (mouse.x - uniforms.u_mouse.value.x) * 0.05;
-        uniforms.u_mouse.value.y += (mouse.y - uniforms.u_mouse.value.y) * 0.05;
-
+        uniforms.u_time.value = clock.getElapsedTime();
         renderer.render(scene, camera);
         requestAnimationFrame(animate);
       }
       animate();
     })();
 
-    /* ============================================================
-       APP LOGIC
-       ============================================================ */
     let allData = [];
 
     function renderMarkdown(text) {
@@ -285,7 +267,6 @@
       attachCardInteractions();
     }
 
-    // Mouse-tracking glow on cards
     function attachCardInteractions() {
       document.querySelectorAll('.card').forEach(card => {
         card.addEventListener('mousemove', (e) => {
