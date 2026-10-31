@@ -14,11 +14,22 @@ const EXCLUDE_PATTERNS = [
   '*.lock',
   'package.json',
   'package-lock.json',
-  'LICENSE'
 ];
 
+// Set to true to only include files in the repo root (no subdirectories)
 const ROOT_ONLY = true;
+
+// Max characters in the preview card
 const PREVIEW_LENGTH = 200;
+
+
+// Convert a glob-ish pattern to a RegExp. Supports '*' only.
+function patternToRegex(pattern) {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // escape regex special chars (except *)
+    .replace(/\*/g, '.*');                 // * → .*
+  return new RegExp(`^${escaped}$`);
+}
 
 // Precompile patterns
 const EXCLUDE_REGEXES = EXCLUDE_PATTERNS.map(patternToRegex);
