@@ -2,10 +2,35 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-// Get git log with author info and changed files
+const EXCLUDE_PATTERNS = [
+  'data.json',
+  'index.html',
+  'style.css',
+  'generate-data.js',
+  '.gitignore',
+  '.nojekyll',
+  'README.md',
+  '*.json',
+  '*.lock',
+  'package.json',
+  'package-lock.json',
+  'LICENSE'
+];
+
+const ROOT_ONLY = true;
+const PREVIEW_LENGTH = 200;
+
+// Precompile patterns
+const EXCLUDE_REGEXES = EXCLUDE_PATTERNS.map(patternToRegex);
+
+function isExcluded(file) {
+  const base = path.basename(file);
+  // Match against both the full path and the basename
+  return EXCLUDE_REGEXES.some(rx => rx.test(file) || rx.test(base));
+}
+
 function getGitData() {
   try {
-    // Get commit history with author and files
     const logOutput = execSync(
       'git log --pretty=format:"%H|%an|%ae|%ad" --date=short --name-only',
       { encoding: 'utf-8' }
@@ -22,16 +47,18 @@ function getGitData() {
       const files = lines.slice(1);
 
       files.forEach(file => {
-        // Only process files in root (no directory separator) and skip data.json
-        if (!file.includes('/') && file !== 'data.json' && fs.existsSync(file)) {
-          if (!fileAuthors.has(file)) {
-            fileAuthors.set(file, {
-              author,
-              email,
-              date,
-              file
-            });
-          }
+        // Root-only filter
+        if (ROOT_ONLY && file.includes('/')) return;
+
+        // Exclusion filter
+        if (isExcluded(file)) return;
+
+        // Must exist on disk
+        if (!fs.existsSync(file)) return;
+
+        // Only record the FIRST author who touched the file
+        if (!fileAuthors.has(file)) {
+          fileAuthors.set(file, { author, email, date, file });
         }
       });
     });
@@ -43,28 +70,24 @@ function getGitData() {
   }
 }
 
-// Read file content (supports markdown and plain text)
 function readFileContent(filePath) {
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return content;
+    return fs.readFileSync(filePath, 'utf-8');
   } catch (error) {
     console.error(`Error reading ${filePath}:`, error.message);
     return '';
   }
 }
 
-// Convert markdown to plain text preview (simple version)
-function getPreview(content, maxLength = 200) {
-  // Remove markdown syntax for preview
+function getPreview(content, maxLength = PREVIEW_LENGTH) {
   let text = content
-    .replace(/^#+\s+/gm, '') // Remove headers
-    .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold
-    .replace(/\*(.*?)\*/g, '$1') // Remove italic
-    .replace(/`(.*?)`/g, '$1') // Remove inline code
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove links
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '') // Remove images
-    .replace(/\n+/g, ' ') // Replace newlines with spaces
+    .replace(/^#+\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`(.*?)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '')
+    .replace(/\n+/g, ' ')
     .trim();
 
   if (text.length > maxLength) {
@@ -73,27 +96,25 @@ function getPreview(content, maxLength = 200) {
   return text;
 }
 
-// Main function
 function generateData() {
   const filesWithAuthors = getGitData();
-  
+
   const data = filesWithAuthors.map(({ author, email, date, file }) => {
     const content = readFileContent(file);
-    const isMarkdown = file.endsWith('.md');
-    
     return {
       file,
       author,
       email,
       date,
-      isMarkdown,
+      isMarkdown: file.endsWith('.md'),
       preview: getPreview(content),
-      fullContent: content
+      fullContent: content,
     };
   });
 
   fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
-  console.log(`Generated data.json with ${data.length} entries`);
+  console.log(`✔ Generated data.json with ${data.length} entries`);
+  console.log(`  Excluded patterns: ${EXCLUDE_PATTERNS.join(', ')}`);
 }
 
 generateData();
