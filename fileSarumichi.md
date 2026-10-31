@@ -1,1 +1,1 @@
-# Cakra bikin file
+# semua setuju Bouya lelaki sejati
